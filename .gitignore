@@ -1,0 +1,8 @@
+Debug/
+FunLedStrip/
+x64/
+*.sln
+*.vc*
+stdafx.*
+targetver.h*
+
