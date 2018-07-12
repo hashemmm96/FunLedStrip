@@ -4,6 +4,8 @@
 #include "stdafx.h"
 #include <mmdeviceapi.h>
 #include <audioclient.h>
+//#include "kfr/math.hpp"
+//#include "kfr/dft/fft.hpp"
 
 // global windows interfaces
 IAudioCaptureClient *captureClient = NULL;
@@ -26,9 +28,9 @@ HRESULT initAudio() {
 	format.nChannels = 2;
 	format.nSamplesPerSec = 48000;
 	format.nAvgBytesPerSec = 192000;
-	format.nBlockAlign = 4; //Frame size
+	format.nBlockAlign = 4; //Frame size in bytes
 	format.wBitsPerSample = 16;
-	format.cbSize = 0;
+	format.cbSize = 0; // init to 0 b/c pcm, see microsoft docs
 
 	WAVEFORMATEX *pFormat = &format;
 
@@ -60,6 +62,7 @@ HRESULT initAudio() {
 	hr = audioClient->IsFormatSupported(AUDCLNT_SHAREMODE_SHARED, &format, &pFormat);
 	if (hr != S_OK) {
 		printf("Format not supported. Change values of format variable.");
+		return hr;
 	}
 
 	hr = audioClient->Initialize(AUDCLNT_SHAREMODE_SHARED, 0, hnsRequestedDuration, 
@@ -74,8 +77,6 @@ HRESULT initAudio() {
 		printf("Unable to get buffer size: %x\n", hr);
 		return hr;
 	}
-
-	printf("%u", bufferSize);
 
 	hr = audioClient->GetService(__uuidof(IAudioCaptureClient), (void**)&captureClient);
 	if (FAILED(hr)) {
@@ -94,30 +95,33 @@ HRESULT initAudio() {
 
 	deviceEnumerator->Release();
 	device->Release();
-	
+	CoTaskMemFree(pFormat);
+
 	return hr;
 }
 
-
-HRESULT recordAudio(BYTE** data) {
+// Fills buffer with recorded audio.
+HRESULT recordAudio(short *data) {
 	HRESULT hr;
 
 	UINT32 framesAvailable = 0; // Frames available during capture
 	DWORD flags; // buffer flags
 
+	BYTE *temp = NULL;
+
 	Sleep(hnsActualDuration/10000);
-	hr = captureClient->GetBuffer(data, &framesAvailable, &flags, NULL, NULL);
+	hr = captureClient->GetBuffer(&temp, &framesAvailable, &flags, NULL, NULL);
 	if (FAILED(hr)) {
 		printf("Unable to capture audio %x\n", hr);
 		return hr;
 	}
 
+	*data = *reinterpret_cast<short*>(temp);
+
 	// debug
 	// Note that there will be discontinuity if the sleep parameters 
-	// and hnsRequestedDuration aren't compatible. Also if you try 
-	// to print with a low value of sleep CMD will crash, 
-	// but the program still works. Tried writing to file with no crash.
-	
+	// and hnsRequestedDuration aren't compatible.
+	/*
 	if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
 		printf("silent\n");
 	}
@@ -130,8 +134,7 @@ HRESULT recordAudio(BYTE** data) {
 	else {
 		printf("clear\n");
 	}
-	
-	
+	*/
 
 	hr = captureClient->ReleaseBuffer(framesAvailable);
 	if (FAILED(hr)) {
@@ -141,21 +144,30 @@ HRESULT recordAudio(BYTE** data) {
 	return hr;
 }
 
+//void fft()
+//{
+//	dft_plan dft(size);                      // initialize plan
+//	univector<u8> temp(dft.temp_size);       // allocate work buffer
+//	dft.execute(freq, samples, temp);        // do the actual transform
+//											 // work with freq
+//	dft.execute(samples, freq, temp, true);  // do the inverse transform
+//}
 
 int main() {
-	BYTE *data = NULL; // audio data is stored here
-	
-	// Get audio device
+	short data[2048]; // audio data is stored in this buffer. 
+					  // size can be calculated through 
+					  // no. of channels*bytes per sample*desired sample time*samples/sec
+
+	// initialize audio and start audio stream
 	if (FAILED(initAudio())) {
 		return EXIT_FAILURE;
 	}
 
-	// record audio loop
-	while (1) {
-		if (FAILED(recordAudio(&data))) {
-			return EXIT_FAILURE;
-		}		
+	// record audio
+	if (FAILED(recordAudio(data))) {
+		return EXIT_FAILURE;
 	}
+
 
 	// stop audio stream
 	if (FAILED(audioClient->Stop())) {

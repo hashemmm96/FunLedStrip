@@ -5,4 +5,5 @@ x64/
 *.vc*
 stdafx.*
 targetver.h*
-
+include/kfr/
+kfr/
