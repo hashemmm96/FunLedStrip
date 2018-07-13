@@ -4,8 +4,12 @@
 #include "stdafx.h"
 #include <mmdeviceapi.h>
 #include <audioclient.h>
-//#include "kfr/math.hpp"
-//#include "kfr/dft/fft.hpp"
+//#include "kfr/base.hpp"
+//#include "kfr/dft.hpp"
+//#include <kfr/io.hpp>
+
+
+#include<fstream>
 
 // global windows interfaces
 IAudioCaptureClient *captureClient = NULL;
@@ -109,6 +113,8 @@ HRESULT recordAudio(short *data) {
 
 	BYTE *temp = NULL;
 
+	// Note that there will be discontinuity if the sleep parameters 
+	// and hnsRequestedDuration aren't compatible.
 	Sleep(hnsActualDuration/10000);
 	hr = captureClient->GetBuffer(&temp, &framesAvailable, &flags, NULL, NULL);
 	if (FAILED(hr)) {
@@ -116,11 +122,10 @@ HRESULT recordAudio(short *data) {
 		return hr;
 	}
 
-	*data = *reinterpret_cast<short*>(temp);
+	data = reinterpret_cast<short*>(temp);
 
-	// debug
-	// Note that there will be discontinuity if the sleep parameters 
-	// and hnsRequestedDuration aren't compatible.
+	
+	// debug 
 	/*
 	if (flags & AUDCLNT_BUFFERFLAGS_SILENT) {
 		printf("silent\n");
@@ -144,33 +149,72 @@ HRESULT recordAudio(short *data) {
 	return hr;
 }
 
-//void fft()
+// Normalizes 16 bit integers to floats in range -1.0 to 1.0
+void normalize(short *input, float *output) {
+	for (int i = 0; i < sizeof(input); i++) {
+		output[i] = input[i] / 32768.0; // 2^15 = 32768
+	}
+}
+
+//
+//void fft(float *data)
 //{
-//	dft_plan dft(size);                      // initialize plan
-//	univector<u8> temp(dft.temp_size);       // allocate work buffer
-//	dft.execute(freq, samples, temp);        // do the actual transform
-//											 // work with freq
-//	dft.execute(samples, freq, temp, true);  // do the inverse transform
+//	const size_t size = sizeof(data);			// fft size
+//
+//	kfr::univector<kfr::complex<float>, 0> in(data, sizeof(data));
+//
+//	kfr::dft_plan<kfr::i16> dft(size);		// initialize plan
+//	kfr::univector<kfr::i16> temp(dft.size);	// allocate work buffer
+//	dft.execute(freq, samples, temp);			// do the actual transform
+//												// work with freq
 //}
 
 int main() {
-	short data[2048]; // audio data is stored in this buffer. 
-					  // size can be calculated through 
-					  // no. of channels*bytes per sample*desired sample time*samples/sec
+	short data[1920/2]; // audio data is stored in this buffer.
+						// short b/c 16 bit audio.
+						// size (in bytes) can be calculated through 
+						// no. of channels*bytes per sample*desired sample time*samples/sec
+						// in this case: 10 ms.
+						// divide by two to get 16 bit values.
+
+	float fData[1920/2]; // used for normalized values.
 
 	// initialize audio and start audio stream
 	if (FAILED(initAudio())) {
+		printf("Failed to initialize audio.");
 		return EXIT_FAILURE;
 	}
 
+
+	// loop
 	// record audio
 	if (FAILED(recordAudio(data))) {
+		printf("Failed to record audio.");
 		return EXIT_FAILURE;
 	}
 
+	// normalize to float values between -1 and 1
+
+	std::fstream fs;
+	fs.open("test.txt", std::fstream::out);
+
+	normalize(data, fData); // normalize data and store in fData.
+
+	for (int i =0; i < sizeof(fData); i++) {
+		printf("%f\n", fData[i]);
+		fs << fData[i] << "\n";
+	}
+
+
+	fs.close();
+
+	// transform to freq domain with fft
+
+	// end loop.
 
 	// stop audio stream
 	if (FAILED(audioClient->Stop())) {
+		printf("Failed to stop audio stream.");
 		return EXIT_FAILURE;
 	}
 
