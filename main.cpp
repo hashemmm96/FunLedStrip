@@ -195,18 +195,20 @@ int main() {
 
 	// normalize to float values between -1 and 1
 
+	
+	normalize(data, fData); // normalize data and store in fData.
+
+
+	/* Debug
 	std::fstream fs;
 	fs.open("test.txt", std::fstream::out);
-
-	normalize(data, fData); // normalize data and store in fData.
 
 	for (int i =0; i < sizeof(fData); i++) {
 		printf("%f\n", fData[i]);
 		fs << fData[i] << "\n";
 	}
-
-
 	fs.close();
+	*/
 
 	// transform to freq domain with fft
 
